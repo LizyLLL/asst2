@@ -69,13 +69,17 @@ void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
     // tasks sequentially on the calling thread.
     //
     
-    std::thread workers[num_threads_];
+    std::vector<std::thread> workers(num_threads_);
+    std::atomic<int> curr(0);
+
     for (int i = 1; i < num_threads_; i++) {
-        workers[i] = std::thread(&TaskSystemParallelSpawn::runWithThread, this, runnable, num_total_tasks, i);
+        workers[i] = std::thread(&TaskSystemParallelSpawn::runWithThread, this, runnable, std::ref(curr), num_total_tasks);
     }
 
-    for (int i = 0; i < num_total_tasks; i += num_threads_) {
-        runnable->runTask(i, num_total_tasks);
+    int turn = -1;
+    while (turn < num_total_tasks) {
+        turn = curr.fetch_add(1);
+        runnable->runTask(turn, num_total_tasks);
     }
 
     for (int i = 1; i < num_threads_; i++) {
@@ -84,10 +88,11 @@ void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
     
 }
 
-void TaskSystemParallelSpawn::runWithThread(IRunnable* runnable, int num_total_tasks, int start) {
-    for (int i = start; i < num_total_tasks; i += num_threads_) {
-        
-        runnable->runTask(i, num_total_tasks);
+void TaskSystemParallelSpawn::runWithThread(IRunnable* runnable, std::atomic<int>& curr,int num_total_tasks) {
+    int turn = -1;
+    while (turn < num_total_tasks) {
+        turn = curr.fetch_add(1);
+        runnable->runTask(turn, num_total_tasks);
     }
 }
 
