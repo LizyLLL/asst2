@@ -2,6 +2,8 @@
 #include "itasksys.h"
 #include <thread>
 #include <iostream>
+#include <mutex>
+#include <queue>
 
 IRunnable::~IRunnable() {}
 
@@ -117,16 +119,51 @@ const char* TaskSystemParallelThreadPoolSpinning::name() {
     return "Parallel + Thread Pool + Spin";
 }
 
-TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int num_threads): ITaskSystem(num_threads) {
+TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int num_threads): ITaskSystem(num_threads), num_threads_(num_threads) {
     //
     // TODO: CS149 student implementations may decide to perform setup
     // operations (such as thread pool construction) here.
     // Implementations are free to add new class member variables
     // (requiring changes to tasksys.h).
     //
+    workers_.resize(num_threads);
+	for (int i = 0; i < num_threads; i++) {
+        // std::cout<< i<< std::endl;
+    	this->workers_[i] = std::thread([this] {
+      		for(;;) {
+                // std::cout<<"threadPoolConstruct"<<std::endl;
+				TaskID task;
+            	{
+                 	std::unique_lock<std::mutex> lock(this->queue_mutex_);
+                    this->condition_.wait(lock, [this]{ return this->stop_ || !this->tasks_.empty();});
+                    if (this->stop_ || this->tasks_.empty()) {
+                        //  std::cout<<this->stop_<<std::endl;
+                    	break;
+                    }
+					task = this->tasks_.front();
+                    // std::cout<<task<<std::endl;
+                    this->tasks_.pop();
+
+                }
+                // std::cout << task << "  " << num_total_tasks_<<std::endl;
+                this->runnable_->runTask(task, this->num_total_tasks_);
+                if (task == this->num_total_tasks_ - 1) {
+                    cond_sync_.notify_all();
+                }
+            }
+      	});
+    }
 }
 
-TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {}
+TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {
+    {
+        std::unique_lock<std::mutex> lock(queue_mutex_);
+        stop_ = true;
+    }
+    condition_.notify_all();
+    for(std::thread &worker: workers_)
+        worker.join();
+}
 
 void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_total_tasks) {
 
@@ -136,10 +173,23 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
     // method in Part A.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
+    {
 
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
+    	std::unique_lock<std::mutex> lock(this->queue_mutex_);
+        this->num_total_tasks_ = num_total_tasks;
+        this->runnable_ =  runnable;
+
+        for  (int i = 0; i < num_total_tasks; i++) {
+
+        	this->tasks_.push(TaskID(i));
+
+            condition_.notify_one();
+        }
     }
+    std::mutex lck;
+    std::unique_lock<std::mutex> lock(lck);
+    cond_sync_.wait(lock, [this] { return this->stop_ || this->tasks_.empty();});
+	return;
 }
 
 TaskID TaskSystemParallelThreadPoolSpinning::runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
