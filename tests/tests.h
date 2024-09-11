@@ -6,7 +6,7 @@
 #include <thread>
 #include <atomic>
 #include <set>
-
+#include <iostream>
 #include "CycleTimer.h"
 #include "itasksys.h"
 
@@ -192,7 +192,6 @@ class PingPongTask : public IRunnable {
             int elements_per_task = (num_elements_ + num_total_tasks-1) / num_total_tasks;
             int start_el = elements_per_task * task_id;
             int end_el = std::min(start_el + elements_per_task, num_elements_);
-
             if (equal_work_) {
                 for (int i=start_el; i<end_el; i++)
                     output_array_[i] = ping_pong_work(iters_, input_array_[i]);

@@ -94,6 +94,7 @@ void TaskSystemParallelSpawn::runWithThread(IRunnable* runnable, std::atomic<int
     int turn = -1;
     while (turn < num_total_tasks) {
         turn = curr.fetch_add(1);
+        std::cout<<turn<<" ";
         runnable->runTask(turn, num_total_tasks);
     }
 }
@@ -127,6 +128,7 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
     // (requiring changes to tasksys.h).
     //
     workers_.resize(num_threads);
+    finish_tasks_ = 0;
 	for (int i = 0; i < num_threads; i++) {
         // std::cout<< i<< std::endl;
     	this->workers_[i] = std::thread([this] {
@@ -141,13 +143,14 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
                     	break;
                     }
 					task = this->tasks_.front();
-                    // std::cout<<task<<std::endl;
                     this->tasks_.pop();
-
                 }
                 // std::cout << task << "  " << num_total_tasks_<<std::endl;
                 this->runnable_->runTask(task, this->num_total_tasks_);
-                if (task == this->num_total_tasks_ - 1) {
+                ++finish_tasks_;
+                //std::cout<<finish_tasks_<<" "<<num_total_tasks_<<std::endl;
+                if (finish_tasks_ == this->num_total_tasks_) {
+                    //std::cout<<finish_tasks_<<" finish all tasks"<<std::endl;
                     cond_sync_.notify_all();
                 }
             }
@@ -173,6 +176,7 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
     // method in Part A.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
+    turn += 1;
     {
 
     	std::unique_lock<std::mutex> lock(this->queue_mutex_);
@@ -187,8 +191,11 @@ void TaskSystemParallelThreadPoolSpinning::run(IRunnable* runnable, int num_tota
         }
     }
     std::mutex lck;
-    std::unique_lock<std::mutex> lock(lck);
-    cond_sync_.wait(lock, [this] { return this->stop_ || this->tasks_.empty();});
+    {
+        std::unique_lock<std::mutex> lock(lck);
+        cond_sync_.wait(lock, [this] {return this->stop_ || finish_tasks_ == this->num_total_tasks_;});
+        finish_tasks_ = 0;
+    }
 	return;
 }
 

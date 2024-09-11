@@ -65,9 +65,11 @@ class TaskSystemParallelThreadPoolSpinning: public ITaskSystem {
         std::mutex queue_mutex_;
         std::condition_variable condition_;
         std::condition_variable cond_sync_;
+        std::atomic<int> finish_tasks_;
         int stop_ = 0;
         int num_threads_;
         int num_total_tasks_;
+        int turn = 0;
 };
 
 /*
