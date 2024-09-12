@@ -79,8 +79,7 @@ void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
     }
 
     int turn = -1;
-    while (turn < num_total_tasks) {
-        turn = curr.fetch_add(1);
+    while ((turn = curr.fetch_add(1)) < num_total_tasks) {
         runnable->runTask(turn, num_total_tasks);
     }
 
@@ -92,9 +91,7 @@ void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
 
 void TaskSystemParallelSpawn::runWithThread(IRunnable* runnable, std::atomic<int>& curr,int num_total_tasks) {
     int turn = -1;
-    while (turn < num_total_tasks) {
-        turn = curr.fetch_add(1);
-        std::cout<<turn<<" ";
+    while ((turn = curr.fetch_add(1)) < num_total_tasks) {
         runnable->runTask(turn, num_total_tasks);
     }
 }
