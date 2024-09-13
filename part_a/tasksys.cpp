@@ -145,7 +145,7 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
                 // std::cout << task << "  " << num_total_tasks_<<std::endl;
                 this->runnable_->runTask(task, this->num_total_tasks_);
                 ++finish_tasks_;
-                //std::cout<<finish_tasks_<<" "<<num_total_tasks_<<std::endl;
+                // std::cout<<finish_tasks_<<" "<<num_total_tasks_<<std::endl;
                 if (finish_tasks_ == this->num_total_tasks_) {
                     //std::cout<<finish_tasks_<<" finish all tasks"<<std::endl;
                     cond_sync_.notify_all();
@@ -156,10 +156,7 @@ TaskSystemParallelThreadPoolSpinning::TaskSystemParallelThreadPoolSpinning(int n
 }
 
 TaskSystemParallelThreadPoolSpinning::~TaskSystemParallelThreadPoolSpinning() {
-    {
-        std::unique_lock<std::mutex> lock(queue_mutex_);
-        stop_ = true;
-    }
+    stop_ = true;
     condition_.notify_all();
     for(std::thread &worker: workers_)
         worker.join();
