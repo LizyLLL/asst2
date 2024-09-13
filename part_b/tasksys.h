@@ -2,6 +2,13 @@
 #define _TASKSYS_H
 
 #include "itasksys.h"
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <vector>
+#include <atomic>
+#include <queue>
+#include <unordered_map>
 
 /*
  * TaskSystemSerial: This class is the student's implementation of a
@@ -68,18 +75,37 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         TaskID runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
                                 const std::vector<TaskID>& deps);
         void sync();
+        void scheduling();
 
         int num_threads_;
         int num_total_tasks_;
+        int stop_;
+        TaskID tasks_;
         std::queue<TaskID> queue_;
         std::mutex queue_mutex_;
         std::condition_variable condition_;
         std::condition_variable finished_;
-        std::atomic<int> finished_tasks_;
 
-        std::queue<TaskID> waiting_bulk_;
+        std::atomic<int> finished_tasks_;
+        std::vector<std::thread> threads_;
+
+        TaskID bulk_task_ = -1;
+
+        IRunnable* runnable_;
+
+        std::mutex ready_mutex_;
         std::queue<TaskID> ready_bulk_;
 
+        std::atomic<int> wait_tasks_;
+
+        std::vector<int> total_tasks_;
+        std::vector<IRunnable*> runnables_;
+
+        std::unordered_map<TaskID, std::vector<TaskID>> outs;
+		std::unordered_map<TaskID, int> in;
+        std::mutex in_mutex_;
+
+        std::mutex schedule_mutex_;
 };
 
 #endif
