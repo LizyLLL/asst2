@@ -1,6 +1,7 @@
 #include "tasksys.h"
 #include <thread>
 #include <unordered_map>
+#include <iostream>
 
 IRunnable::~IRunnable() {}
 
@@ -137,10 +138,12 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
     threads_.resize(num_threads);
     stop_ = 0;
     bulk_task_ = -1;
+    wait_tasks_ = 0;
     for (int i = 0; i < num_threads; i++) {
          threads_[i] = std::thread([this] {
              for(;;) {
                TaskID task;
+
                {
                  std::unique_lock<std::mutex> lock(queue_mutex_);
                  condition_.wait(lock, [this] { return stop_ || !queue_.empty();});
@@ -148,12 +151,15 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
                       break;
                  }
                  task = queue_.front();
+                 // std::cout<<task<<" ";
                  queue_.pop();
                }
                runnable_->runTask(task, num_threads_);
                finished_tasks_++;
                if (finished_tasks_ == num_total_tasks_) {
-
+				 set_mutex_.lock();
+                 finished_set_.insert(bulk_task_);
+                 set_mutex_.unlock();
                  for (auto& bulk_id:outs[bulk_task_]) {
                      in_mutex_.lock();
                      in[bulk_id]--;
@@ -165,6 +171,7 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
                      }
                      in_mutex_.unlock();
                  }
+
                  this->scheduling();
                }
              }
@@ -181,11 +188,13 @@ void TaskSystemParallelThreadPoolSleeping::scheduling() {
 
         ready_mutex_.lock();
         if (ready_bulk_.empty()) {
+          // std::cout<<wait_tasks_<<std::endl;
           finished_.notify_all();
           ready_mutex_.unlock();
           return;
         }
         auto bulk_id = ready_bulk_.front();
+        std::cout<<bulk_id<<std::endl;
         ready_bulk_.pop();
         ready_mutex_.unlock();
         this->num_total_tasks_ = total_tasks_[bulk_id];
@@ -197,7 +206,7 @@ void TaskSystemParallelThreadPoolSleeping::scheduling() {
             std::unique_lock<std::mutex> lock(this->queue_mutex_);
 
             for  (int i = 0; i < num_total_tasks_; i++) {
-
+				//  std::cout<<num_total_tasks_<<" ";
                 this->queue_.push(TaskID(i));
 
                 condition_.notify_one();
@@ -245,23 +254,29 @@ TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(IRunnable* runnabl
     total_tasks_.resize(tasks_ + 1);
     runnables_.resize(tasks_ + 1);
 
-    for  (auto& bulk_id: deps){
+    for (auto& bulk_id: deps) {
+      {
+      	 std::unique_lock<std::mutex> lock(set_mutex_);
+         if (finished_set_.find(bulk_id) != finished_set_.end()) {
+           continue;
+         }
          outs[bulk_id].push_back(tasks_);
          in[tasks_]++;
+      }
     }
 
-    total_tasks_[tasks_] = num_total_tasks_;
+    total_tasks_[tasks_] = num_total_tasks;
     runnables_[tasks_] = runnable;
-
     if (in[tasks_] == 0) {
       ready_mutex_.lock();
       ready_bulk_.push(tasks_);
       ready_mutex_.unlock();
+      this->scheduling();
     } else {
       wait_tasks_ += 1;
     }
 
-    this->scheduling();
+
     return tasks_++;
 }
 
@@ -270,7 +285,9 @@ void TaskSystemParallelThreadPoolSleeping::sync() {
     //
     // TODO: CS149 students will modify the implementation of this method in Part B.
     //
+    // std::cout<<1<<std::endl;
     std::unique_lock<std::mutex> lock(ready_mutex_);
+
     finished_.wait(lock, [this] { return ready_bulk_.empty() && wait_tasks_ == 0; });
 
     return;

@@ -9,6 +9,7 @@
 #include <atomic>
 #include <queue>
 #include <unordered_map>
+#include <unordered_set>
 
 /*
  * TaskSystemSerial: This class is the student's implementation of a
@@ -80,7 +81,7 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         int num_threads_;
         int num_total_tasks_;
         int stop_;
-        TaskID tasks_;
+        TaskID tasks_ = 0;
         std::queue<TaskID> queue_;
         std::mutex queue_mutex_;
         std::condition_variable condition_;
@@ -104,6 +105,9 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         std::unordered_map<TaskID, std::vector<TaskID>> outs;
 		std::unordered_map<TaskID, int> in;
         std::mutex in_mutex_;
+
+        std::unordered_set<TaskID> finished_set_;
+        std::mutex set_mutex_;
 
         std::mutex schedule_mutex_;
 };
