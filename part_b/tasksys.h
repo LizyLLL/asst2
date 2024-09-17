@@ -105,6 +105,7 @@ class TaskSystemParallelThreadPoolSleeping: public ITaskSystem {
         std::unordered_map<TaskID, std::vector<TaskID>> outs;
 		std::unordered_map<TaskID, int> in;
         std::mutex in_mutex_;
+        std::mutex out_mutex_;
 
         std::unordered_set<TaskID> finished_set_;
         std::mutex set_mutex_;

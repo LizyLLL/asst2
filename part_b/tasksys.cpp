@@ -167,6 +167,7 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
 				 set_mutex_.lock();
                  finished_set_.insert(bulk_task_);
                  set_mutex_.unlock();
+                 out_mutex_.lock();
                  for (auto& bulk_id:outs[bulk_task_]) {
                      in_mutex_.lock();
                      in[bulk_id]--;
@@ -178,8 +179,8 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
                      }
                      in_mutex_.unlock();
                  }
-
-                 this->scheduling();
+				out_mutex_.unlock();
+                this->scheduling();
                }
              }
          });
@@ -269,7 +270,9 @@ TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(IRunnable* runnabl
            // std::cout<<"finished"<<std::endl;
            continue;
          }
+         out_mutex_.lock();
          outs[bulk_id].push_back(tasks_);
+         out_mutex_.unlock();
          in[tasks_]++;
       }
     }
