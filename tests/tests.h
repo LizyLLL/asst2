@@ -1198,7 +1198,8 @@ TestResults mandelbrotChunkedTestBase(ITaskSystem* t, bool do_async) {
     // time task-based implementation
     double start_time = CycleTimer::currentSeconds();
     if (do_async) {
-        std::vector<TaskID> deps; // Call runAsyncWithDeps without dependencies.
+        std::vector<TaskID> deps; // Call runAsyncW
+                                  // ithDeps without dependencies.
         t->runAsyncWithDeps(&mandel_task, num_tasks, deps);
         t->sync();
     } else {

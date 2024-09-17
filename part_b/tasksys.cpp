@@ -1,7 +1,9 @@
 #include "tasksys.h"
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <iostream>
+#include "CycleTimer.h"
 
 IRunnable::~IRunnable() {}
 
@@ -60,9 +62,9 @@ TaskSystemParallelSpawn::~TaskSystemParallelSpawn() {}
 
 void TaskSystemParallelSpawn::run(IRunnable* runnable, int num_total_tasks) {
     // NOTE: CS149 students are not expected to implement TaskSystemParallelSpawn in Part B.
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
-    }
+    this->runAsyncWithDeps(runnable, num_total_tasks, std::vector<TaskID>());
+    this->sync();
+    return;
 }
 
 TaskID TaskSystemParallelSpawn::runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
@@ -139,24 +141,29 @@ TaskSystemParallelThreadPoolSleeping::TaskSystemParallelThreadPoolSleeping(int n
     stop_ = 0;
     bulk_task_ = -1;
     wait_tasks_ = 0;
+    // std::cout<<"start"<<std::endl;
     for (int i = 0; i < num_threads; i++) {
+
          threads_[i] = std::thread([this] {
              for(;;) {
                TaskID task;
 
                {
                  std::unique_lock<std::mutex> lock(queue_mutex_);
-                 condition_.wait(lock, [this] { return stop_ || !queue_.empty();});
-                 if (stop_ || queue_.empty()) {
+                 this->condition_.wait(lock, [this] { return this->stop_ || !this->queue_.empty();});
+                 if (this->stop_ || this->queue_.empty()) {
                       break;
                  }
-                 task = queue_.front();
-                 // std::cout<<task<<" ";
-                 queue_.pop();
+                 task = this->queue_.front();
+                 //std::cout<<task<<" ";
+                 this->queue_.pop();
                }
-               runnable_->runTask(task, num_threads_);
+               // double start_time = CycleTimer::currentSeconds();
+               this->runnable_->runTask(task, num_total_tasks_);
+               // double end_time = CycleTimer::currentSeconds();
+               // std::cout<<(end_time - start_time) * 1000<<"\n";
                finished_tasks_++;
-               if (finished_tasks_ == num_total_tasks_) {
+               if (finished_tasks_ == this->num_total_tasks_) {
 				 set_mutex_.lock();
                  finished_set_.insert(bulk_task_);
                  set_mutex_.unlock();
@@ -188,16 +195,17 @@ void TaskSystemParallelThreadPoolSleeping::scheduling() {
 
         ready_mutex_.lock();
         if (ready_bulk_.empty()) {
-          // std::cout<<wait_tasks_<<std::endl;
+          // std::cout<<this->bulk_task_<<std::endl;
           finished_.notify_all();
           ready_mutex_.unlock();
           return;
         }
         auto bulk_id = ready_bulk_.front();
-        std::cout<<bulk_id<<std::endl;
+        //std::cout<<bulk_id<<std::endl;
         ready_bulk_.pop();
         ready_mutex_.unlock();
         this->num_total_tasks_ = total_tasks_[bulk_id];
+        // std::cout<<this->num_total_tasks_<<std::endl;
         this->runnable_ = runnables_[bulk_id];
         finished_tasks_ = 0;
         bulk_task_ = bulk_id;
@@ -236,10 +244,10 @@ void TaskSystemParallelThreadPoolSleeping::run(IRunnable* runnable, int num_tota
     // method in Parts A and B.  The implementation provided below runs all
     // tasks sequentially on the calling thread.
     //
-
-    for (int i = 0; i < num_total_tasks; i++) {
-        runnable->runTask(i, num_total_tasks);
-    }
+    // std::cout<<"run"<<std::endl;
+    this->runAsyncWithDeps(runnable, num_total_tasks, std::vector<TaskID>());
+    this->sync();
+    return;
 }
 
 TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(IRunnable* runnable, int num_total_tasks,
@@ -258,13 +266,14 @@ TaskID TaskSystemParallelThreadPoolSleeping::runAsyncWithDeps(IRunnable* runnabl
       {
       	 std::unique_lock<std::mutex> lock(set_mutex_);
          if (finished_set_.find(bulk_id) != finished_set_.end()) {
+           // std::cout<<"finished"<<std::endl;
            continue;
          }
          outs[bulk_id].push_back(tasks_);
          in[tasks_]++;
       }
     }
-
+    // std::cout<<tasks_<<std::endl;
     total_tasks_[tasks_] = num_total_tasks;
     runnables_[tasks_] = runnable;
     if (in[tasks_] == 0) {
@@ -288,7 +297,11 @@ void TaskSystemParallelThreadPoolSleeping::sync() {
     // std::cout<<1<<std::endl;
     std::unique_lock<std::mutex> lock(ready_mutex_);
 
-    finished_.wait(lock, [this] { return ready_bulk_.empty() && wait_tasks_ == 0; });
-
+    finished_.wait(lock, [this] {
+        // std::cout<<finished_tasks_<<std::endl;
+        return ready_bulk_.empty() && wait_tasks_ == 0
+                && finished_tasks_ == num_total_tasks_;
+        });
+    // std::cout<<"sync finished"<<std::endl;
     return;
 }
